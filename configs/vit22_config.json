@@ -1,0 +1,10 @@
+{
+    "patch_size": 14, 
+    "embed_dim": 6144, 
+    "depth": 48, 
+    "num_heads": 48, 
+    "pre_norm": 1, 
+    "no_embed_class": 1,
+    "qkv_bias": 0, 
+    "qk_norm": 1
+}

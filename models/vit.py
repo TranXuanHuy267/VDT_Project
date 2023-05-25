@@ -7,15 +7,15 @@ import torch
 import torch.utils.checkpoint
 from functools import partial
 from torch.jit import Final
-from block import LayerScale, DropPath
+from models.block import LayerScale, DropPath
 import math
 import warnings
-from weight_init import lecun_normal_
-from pos_embed import resample_abs_pos_embed
+from models.weight_init import lecun_normal_
+from models.pos_embed import resample_abs_pos_embed
 import logging
 import torch.nn.functional as F
 import os
-from build_model import build_model_with_cfg
+from models.build_model import build_model_with_cfg
 
 _logger = logging.getLogger(__name__)
 

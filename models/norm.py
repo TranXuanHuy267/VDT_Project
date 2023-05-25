@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from fast_norm import is_fast_norm, fast_group_norm, fast_layer_norm, fast_rms_norm
+from models.fast_norm import is_fast_norm, fast_group_norm, fast_layer_norm, fast_rms_norm
 
 
 class GroupNorm(nn.GroupNorm):
