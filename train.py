@@ -81,7 +81,7 @@ class Trainer:
             loss = self.loss_fn(self.model(images), labels)
             """
             if self.args.use_inlay==0:
-                feature = self.model.backborn(images).last_hidden_state[:, 0, ]
+                feature = self.model.extract_feat(images)[0]
                 output = self.model.head(feature)
             else:
                 output = self.model(images)
@@ -118,7 +118,7 @@ class Trainer:
                 # output = self.model(images)
                 
                 if self.args.use_inlay==0:
-                    feature = self.model.backborn(images).last_hidden_state[:, 0, ]
+                    feature = self.model.extract_feat(images)[0]
                     output = self.model.head(feature)
                 else:
                     output = self.model(images)
