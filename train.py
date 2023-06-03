@@ -20,6 +20,7 @@ from transformers import ViTModel, ViTMAEModel
 
 # mmpretrain
 from mmpretrain import get_model
+from mmpretrain.models.heads.margin_head import ArcFaceClsHead
 
 
 class Trainer:
@@ -81,8 +82,12 @@ class Trainer:
             loss = self.loss_fn(self.model(images), labels)
             """
             if self.args.use_inlay==0:
-                feature = self.model.extract_feat(images)[0]
+                # feature = self.model.backborn.extract_feat(images)[0]
+                # output = self.model.head(feature)
+                feature = self.model.image_encoder(images).last_hidden_state[:,0,]
+                print(feature.size())
                 output = self.model.head(feature)
+                print(output.size())
             else:
                 output = self.model(images)
             loss = self.loss_fn(output, labels)
@@ -118,7 +123,9 @@ class Trainer:
                 # output = self.model(images)
                 
                 if self.args.use_inlay==0:
-                    feature = self.model.extract_feat(images)[0]
+                    # feature = self.model.backborn.extract_feat(images)[0]
+                    # output = self.model.head(feature)
+                    feature = self.model.image_encoder(images).last_hidden_state[:, 0,]
                     output = self.model.head(feature)
                 else:
                     output = self.model(images)
@@ -231,15 +238,24 @@ def main():
     if args.use_inlay:
         model = Model(args, model_own).to(device)
     else:
-        head = nn.Linear(768, number_id)
+        head = ArcFaceClsHead(
+            num_classes=number_id,
+            in_channels=2048,
+        )
         # backborn = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
         # backborn = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
-        backborn = get_model('vit-large-p16_in21k-pre_3rdparty_in1k-384px', pretrained=True)
-        model = nn.Sequential(OrderedDict([
+        backborn = get_model('resnet50-arcface_8xb32_inshop', pretrained=True)
+        # backborn2 = get_model("vit-base-p16_32xb128-mae_in1k", pretrained=True)
+        backborn2 = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
+        backborn.image_encoder = backborn2
+        backborn.head = head
+        model = backborn
+        """model = nn.Sequential(OrderedDict([
             ("backborn", backborn),
             ("head", head)
-        ])).to(device)
-    
+        ])).to(device)"""
+
+    print(model)
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     print("Number of parameter:", pytorch_total_params)
     param_groups = [
@@ -249,6 +265,9 @@ def main():
             'weight_decay': 1e-2
         },
     ]
+    for name, params in model.named_parameters():
+        pass
+        print(name, params.size(), params.requires_grad)
     
     optimizer = optim.AdamW(params=param_groups)
     loss_fn = nn.CrossEntropyLoss()
