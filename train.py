@@ -21,7 +21,8 @@ from transformers import ViTModel, ViTMAEModel
 # mmpretrain
 from mmpretrain import get_model
 from mmpretrain.models.heads.margin_head import ArcFaceClsHead
-
+from mmpretrain.models.necks import GlobalAveragePooling
+import mmpretrain
 
 class Trainer:
     """
@@ -84,14 +85,22 @@ class Trainer:
             if self.args.use_inlay==0:
                 # feature = self.model.backborn.extract_feat(images)[0]
                 # output = self.model.head(feature)
-                feature = self.model.image_encoder(images).last_hidden_state[:,0,]
-                print(feature.size())
+                
+                feature = self.model.image_encoder(images)
+                # feature = (self.model.image_encoder(images).last_hidden_state[:,0,:], )
                 output = self.model.head(feature)
-                print(output.size())
+                """
+                feature = self.model.image_encoder(images)
+                print(feature)
+                print(feature[0].size())
+                output = self.model.head(feature)
+                """
+                # output = self.model(images)[0]
+                # print(output)
             else:
                 output = self.model(images)
             loss = self.loss_fn(output, labels)
-            
+
             # Backpropagate the loss
             loss.backward()
             # Update the model's parameters
@@ -123,10 +132,16 @@ class Trainer:
                 # output = self.model(images)
                 
                 if self.args.use_inlay==0:
-                    # feature = self.model.backborn.extract_feat(images)[0]
-                    # output = self.model.head(feature)
-                    feature = self.model.image_encoder(images).last_hidden_state[:, 0,]
+                    """
+                    feature = self.model.image_encoder(images).last_hidden_state[:,0,]
+                    print(feature.size())
+                    output = self.model.head((feature))
+                    print(output.size())
+                    """
+                    feature = self.model.image_encoder(images)
+                    # feature = (self.model.image_encoder(images).last_hidden_state[:,0,:], )
                     output = self.model.head(feature)
+                    # output = self.model(images)[0]  
                 else:
                     output = self.model(images)
                     
@@ -235,19 +250,22 @@ def main():
     ]
     """
     
+    for i in [i for i in mmpretrain.list_models() if "swin" in i]:
+        print(i)
     if args.use_inlay:
         model = Model(args, model_own).to(device)
     else:
         head = ArcFaceClsHead(
             num_classes=number_id,
-            in_channels=2048,
+            in_channels=1536,
         )
         # backborn = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
         # backborn = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
         backborn = get_model('resnet50-arcface_8xb32_inshop', pretrained=True)
-        # backborn2 = get_model("vit-base-p16_32xb128-mae_in1k", pretrained=True)
-        backborn2 = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
-        backborn.image_encoder = backborn2
+        backborn2 = get_model("swinv2-base-w16_3rdparty_in1k-256px", pretrained=True)
+        
+        # backborn2 = ViTModel.from_pretrained("google/vit-large-patch16-224-in21k")
+        backborn.image_encoder = nn.Sequential(backborn2.backbone, GlobalAveragePooling())
         backborn.head = head
         model = backborn
         """model = nn.Sequential(OrderedDict([
@@ -255,7 +273,7 @@ def main():
             ("head", head)
         ])).to(device)"""
 
-    print(model)
+    # print(model)
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     print("Number of parameter:", pytorch_total_params)
     param_groups = [
@@ -265,11 +283,23 @@ def main():
             'weight_decay': 1e-2
         },
     ]
+
+    param_group2 = [
+        {
+            'params': [p for p in model.parameters() if p.requires_grad],
+            'lr': 0.02, 
+            'weight_decay': 0.0005, 
+            'momentum': 0.9, 
+            'nesterov': True
+        },
+    ]
+
     for name, params in model.named_parameters():
         pass
-        print(name, params.size(), params.requires_grad)
+        # print(name, params.size(), params.requires_grad)
     
     optimizer = optim.AdamW(params=param_groups)
+    optimizer2 = optim.SGD(params=param_groups)
     loss_fn = nn.CrossEntropyLoss()
     trainer = Trainer(model, optimizer, loss_fn, args.exp_name, device, number_id, config, args)
     trainer.train(trainloader, valloader, epochs)
