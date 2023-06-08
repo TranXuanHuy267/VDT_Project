@@ -262,9 +262,9 @@ def main():
         # backborn = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
         # backborn = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
         backborn = get_model('resnet50-arcface_8xb32_inshop', pretrained=True)
-        backborn2 = get_model("swinv2-base-w16_3rdparty_in1k-256px", pretrained=True)
+        # backborn2 = get_model("swinv2-base-w16_3rdparty_in1k-256px", pretrained=True)
         
-        # backborn2 = ViTModel.from_pretrained("google/vit-large-patch16-224-in21k")
+        backborn2 = ViTModel.from_pretrained("google/vit-large-patch16-224-in21k")
         backborn.image_encoder = nn.Sequential(backborn2.backbone, GlobalAveragePooling())
         backborn.head = head
         model = backborn
