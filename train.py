@@ -56,14 +56,15 @@ class Trainer:
             test_losses.append(test_loss)
             accuracies.append(accuracy)
             print(f"Epoch: {i+1}, Train loss: {train_loss:.4f}, Val loss: {test_loss:.4f}, Accuracy: {accuracy:.4f}")
-            if accuracy > best_accuracy:
+            if accuracy >= best_accuracy:
                 print('Save checkpoint at epoch', i+1)
                 best_accuracy = accuracy
                 best_model = self.model
                 self.best_epoch = i+1
+                save_experiment(self.exp_name, self.config, self.model, train_losses, test_losses, accuracies)
             print("-"*30)
         # Save the experiment
-        save_experiment(self.exp_name, self.config, self.model, train_losses, test_losses, accuracies)
+        # save_experiment(self.exp_name, self.config, self.model, train_losses, test_losses, accuracies)
 
     def train_epoch(self, trainloader):
         """
@@ -82,12 +83,14 @@ class Trainer:
             """
             loss = self.loss_fn(self.model(images), labels)
             """
-            if self.args.use_inlay==0:
+            if self.args.model=="vitbase" or self.args.model == "vitlarge":
                 # feature = self.model.backborn.extract_feat(images)[0]
                 # output = self.model.head(feature)
                 
-                feature = self.model.image_encoder(images)
+                # feature = self.model.image_encoder(images)
                 # feature = (self.model.image_encoder(images).last_hidden_state[:,0,:], )
+                feature = self.model.backborn(images).last_hidden_state[:,0,:]
+            
                 output = self.model.head(feature)
                 """
                 feature = self.model.image_encoder(images)
@@ -97,8 +100,21 @@ class Trainer:
                 """
                 # output = self.model(images)[0]
                 # print(output)
-            else:
+            elif self.args.model == "vitbaseinlay":
                 output = self.model(images)
+            elif self.args.model == "resnetarcloss":
+                output = self.model(images)[0]
+            elif self.args.model == "vitbasearcloss" or self.args.model == "vitlargearcloss":
+                # feature = self.model.image_encoder(images)
+                feature = (self.model.image_encoder(images).last_hidden_state[:,0,:], )
+                output = self.model.head(feature)
+            elif self.args.model == "swinbasearcloss" or self.args.model == "swinlargearcloss":
+                # feature = self.model.image_encoder(images)
+                feature = self.model.image_encoder(images)
+                output = self.model.head(feature)
+            
+            
+                
             loss = self.loss_fn(output, labels)
 
             # Backpropagate the loss
@@ -109,11 +125,11 @@ class Trainer:
         return total_loss / len(trainloader.dataset)
 
     def test(self, testloader):
-        _, self.model, _, _, _ = load_experiment(self.exp_name, "bestmodel.pt")
+        _, self.model, _, _, _ = load_experiment(self.model, self.exp_name, "bestmodel.pt")
         self.model = self.model.to(self.device)
         accuracy, test_loss = self.evaluate(testloader)
         print(f"Test: Best epoch: {self.best_epoch}, Test loss: {test_loss:.4f}, Accuracy: {accuracy:.4f}")
-            
+                
 
     @torch.no_grad()
     def evaluate(self, testloader):
@@ -131,20 +147,35 @@ class Trainer:
                 # Get predictions
                 # output = self.model(images)
                 
-                if self.args.use_inlay==0:
-                    """
-                    feature = self.model.image_encoder(images).last_hidden_state[:,0,]
-                    print(feature.size())
-                    output = self.model.head((feature))
-                    print(output.size())
+                if self.args.model=="vitbase" or self.args.model == "vitlarge":
+                    # feature = self.model.backborn.extract_feat(images)[0]
+                    # output = self.model.head(feature)
+                    
+                    # feature = self.model.image_encoder(images)
+                    # feature = (self.model.image_encoder(images).last_hidden_state[:,0,:], )
+                    feature = self.model.backborn(images).last_hidden_state[:,0,:]
+                
+                    output = self.model.head(feature)
                     """
                     feature = self.model.image_encoder(images)
-                    # feature = (self.model.image_encoder(images).last_hidden_state[:,0,:], )
+                    print(feature)
+                    print(feature[0].size())
                     output = self.model.head(feature)
-                    # output = self.model(images)[0]  
-                else:
+                    """
+                    # output = self.model(images)[0]
+                    # print(output)
+                elif self.args.model == "vitbaseinlay":
                     output = self.model(images)
-                    
+                elif self.args.model == "resnetarcloss":
+                    output = self.model(images)[0]
+                elif self.args.model == "vitbasearcloss" or self.args.model == "vitlargearcloss":
+                    feature = (self.model.image_encoder(images).last_hidden_state[:,0,:], )
+                    output = self.model.head(feature)
+                elif self.args.model == "swinbasearcloss" or self.args.model == "swinlargearcloss":
+                    # feature = self.model.image_encoder(images)
+                    feature = self.model.image_encoder(images)
+                    output = self.model.head(feature)
+
                 # Calculate the loss
                 loss = self.loss_fn(output, labels)
                 
@@ -172,10 +203,10 @@ def parse_args():
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--config", type=str, default="own_config.json")
     parser.add_argument("--number-id", type=int, required=True)
-    
+    parser.add_argument("--model", type=str, default="vitbase")
     # update inlay
     parser.add_argument("--patch-size", type=int, default=14)
-    parser.add_argument("--use-inlay", type=int, default=0)
+    parser.add_argument("--use-inlay", type=int, default=1)
     parser.add_argument("--train-value", type=int, default=1)
     parser.add_argument("--std", type=int, default=1)
     parser.add_argument('--norm_type', type=str, default='nonorm', help="{'nonorm', 'contextnorm', 'tasksegmented_contextnorm'}")
@@ -250,14 +281,12 @@ def main():
     ]
     """
     
-    for i in [i for i in mmpretrain.list_models() if "swin" in i]:
-        print(i)
-    if args.use_inlay:
+    """if args.use_inlay:
         model = Model(args, model_own).to(device)
     else:
         head = ArcFaceClsHead(
             num_classes=number_id,
-            in_channels=1536,
+            in_channels=1024,
         )
         # backborn = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
         # backborn = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
@@ -265,13 +294,91 @@ def main():
         # backborn2 = get_model("swinv2-base-w16_3rdparty_in1k-256px", pretrained=True)
         
         backborn2 = ViTModel.from_pretrained("google/vit-large-patch16-224-in21k")
-        backborn.image_encoder = nn.Sequential(backborn2.backbone, GlobalAveragePooling())
+        backborn.image_encoder = backborn2 # nn.Sequential(backborn2, GlobalAveragePooling())
         backborn.head = head
         model = backborn
+        model = nn.Sequential(OrderedDict([
+            ("backborn", backborn),
+            ("head", head)
+        ])).to(device)"""
+    
+    if args.model == "vitbaseinlay":
+        model = Model(args, model_own).to(device)
+    elif args.model == "vitbase":
+        head = nn.Linear(768, number_id)
+        backborn = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
+        # backborn = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
+        model = nn.Sequential(OrderedDict([
+            ("backborn", backborn),
+            ("head", head)
+        ])).to(device)
+    elif args.model == "vitlarge":
+        head = nn.Linear(1024, number_id)
+        backborn = ViTModel.from_pretrained("google/vit-large-patch16-224-in21k")
+        model = nn.Sequential(OrderedDict([
+            ("backborn", backborn),
+            ("head", head)
+        ])).to(device)
+    elif args.model == "resnetarcloss":
+        backborn = get_model('resnet50-arcface_8xb32_inshop', pretrained=True)
+        model = backborn
+    elif args.model == "vitbasearcloss":
+        head = ArcFaceClsHead(
+            num_classes=number_id,
+            in_channels=768,
+        )
+        # backborn = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
+        # backborn = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
+        backborn = get_model('resnet50-arcface_8xb32_inshop', pretrained=True)
+        # backborn2 = get_model("swinv2-base-w16_3rdparty_in1k-256px", pretrained=True)
+        backborn2 = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
+        backborn.image_encoder = backborn2 # nn.Sequential(backborn2, GlobalAveragePooling())
+        backborn.head = head
+        model = backborn
+        
         """model = nn.Sequential(OrderedDict([
             ("backborn", backborn),
             ("head", head)
         ])).to(device)"""
+    elif args.model == "vitlargearcloss":
+        head = ArcFaceClsHead(
+            num_classes=number_id,
+            in_channels=1024,
+        )
+        # backborn = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
+        # backborn = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
+        backborn = get_model('resnet50-arcface_8xb32_inshop', pretrained=True)
+        # backborn2 = get_model("swinv2-base-w16_3rdparty_in1k-256px", pretrained=True)
+        backborn2 = ViTModel.from_pretrained("google/vit-large-patch16-224-in21k")
+        backborn.image_encoder = backborn2 # nn.Sequential(backborn2, GlobalAveragePooling())
+        backborn.head = head
+        model = backborn
+    elif args.model == "swinbasearcloss":
+        head = ArcFaceClsHead(
+             num_classes=number_id,
+             in_channels=1024,
+        )
+        backborn = get_model('resnet50-arcface_8xb32_inshop', pretrained=True)
+        backborn2 = get_model("swin-base_in21k-pre-3rdparty_in1k", pretrained=True)
+
+        # backborn2 = ViTModel.from_pretrained("google/vit-large-patch16-224-in21k")
+        backborn.image_encoder = nn.Sequential(backborn2.backbone, GlobalAveragePooling())
+        backborn.head = head
+        model = backborn
+    elif args.model == "swinlargearcloss":
+        head = ArcFaceClsHead(
+             num_classes=number_id,
+             in_channels=1536,
+        )
+        backborn = get_model('resnet50-arcface_8xb32_inshop', pretrained=True)
+        backborn2 = get_model("swin-large_in21k-pre-3rdparty_in1k", pretrained=True)
+
+        # backborn2 = ViTModel.from_pretrained("google/vit-large-patch16-224-in21k")
+        backborn.image_encoder = nn.Sequential(backborn2.backbone, GlobalAveragePooling())
+        backborn.head = head
+        model = backborn
+    
+
 
     # print(model)
     pytorch_total_params = sum(p.numel() for p in model.parameters())
